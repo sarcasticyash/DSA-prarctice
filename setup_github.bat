@@ -13,6 +13,8 @@ echo.
 echo [2/5] Git user config check kar raha hai...
 git config user.name >nul 2>&1 || git config user.name "sarcasticyash"
 git config user.email >nul 2>&1 || git config user.email "singh@example.com"
+git config core.autocrlf false
+git config core.safecrlf false
 
 echo.
 echo [3/5] GitHub remote add kar raha hai...
