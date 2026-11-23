@@ -204,8 +204,8 @@ app.post('/api/push', (req, res) => {
             const notesStatusMsg = notesSaved ? '\n📝 Notes: Saved locally (.notes.md)' : '';
 
             if (err) {
-                const msg = stderr || stdout || err.message || '';
-                if (msg.includes('nothing to commit') || stdout.includes('nothing to commit') || msg.includes('Everything up-to-date')) {
+                const msg = (stderr || '') + (stdout || '') + (err.message || '');
+                if (msg.includes('nothing to commit') || msg.includes('Everything up-to-date')) {
                     return res.json({ 
                         success: true,
                         localSaved: true,
@@ -216,14 +216,20 @@ app.post('/api/push', (req, res) => {
                         message: `Saved locally! Already up to date on GitHub (${targetBranch} branch).\n📁 ${relFilePath}${notesStatusMsg}` 
                     });
                 }
+                const filteredStderr = (stderr || '')
+                    .split(/\r?\n/)
+                    .filter(line => !line.trim().startsWith('warning:'))
+                    .join('\n')
+                    .trim();
+                const noticeMsg = filteredStderr || err.message || 'Unknown git error';
                 return res.json({ 
                     success: true, 
-                    localSaved: true,
-                    notesSaved: notesSaved,
-                    gitPushed: false,
-                    relFilePath: relFilePath,
-                    branch: targetBranch,
-                    message: `Saved locally to ${relFilePath}!${notesStatusMsg}\n(Git push notice: ${stderr.trim() || err.message})` 
+                    localSaved: true, 
+                    notesSaved: notesSaved, 
+                    gitPushed: false, 
+                    relFilePath: relFilePath, 
+                    branch: targetBranch, 
+                    message: `Saved locally to ${relFilePath}!${notesStatusMsg}\n(Git push notice: ${noticeMsg})` 
                 });
             }
 
