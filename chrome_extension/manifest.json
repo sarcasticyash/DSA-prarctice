@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Striver DSA Auto-Sync (GitHub & Local)",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Auto-saves and pushes solved Striver A2Z DSA Sheet code to GitHub repo & local project folder.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "http://localhost:3456/*",

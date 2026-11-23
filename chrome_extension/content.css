@@ -208,6 +208,76 @@
     color: #38bdf8;
 }
 
+/* Code Preview Accordion & Textarea */
+.striver-sync-code-accordion {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.striver-sync-code-accordion[open] {
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+.striver-sync-code-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #cbd5e1;
+    user-select: none;
+    background: rgba(30, 41, 59, 0.4);
+}
+
+.striver-sync-code-summary:hover {
+    background: rgba(30, 41, 59, 0.8);
+    color: #ffffff;
+}
+
+.striver-sync-reextract-btn {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.striver-sync-reextract-btn:hover {
+    background: rgba(99, 102, 241, 0.4);
+    color: #ffffff;
+}
+
+.striver-sync-code-preview-container {
+    padding: 8px;
+    background: #090d16;
+}
+
+.striver-sync-code-textarea {
+    width: 100%;
+    min-height: 140px;
+    max-height: 260px;
+    background: #090d16;
+    border: none;
+    color: #34d399;
+    font-family: 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+    white-space: pre;
+    tab-size: 4;
+}
+
 .striver-sync-actions {
     display: flex;
     gap: 12px;

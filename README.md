@@ -2,7 +2,7 @@
 
 [![Progress](https://img.shields.io/badge/Progress-In%20Progress-yellow?style=for-the-badge)](https://takeuforward.org/strivers-a2z-dsa-course/strivers-a2z-dsa-course-sheet-2/)
 [![Language](https://img.shields.io/badge/Language-C++-blue?style=for-the-badge&logo=cplusplus)](https://cplusplus.com/)
-[![GitHub last commit](https://img.shields.io/github/last-commit/OMKAR580/Striver-A2Z-DSA?style=for-the-badge)](https://github.com/OMKAR580/Striver-A2Z-DSA)
+[![GitHub last commit](https://img.shields.io/github/last-commit/sarcasticyash/DSA-prarctice?style=for-the-badge)](https://github.com/sarcasticyash/DSA-prarctice)
 
 > Solving all problems from [Striver's A2Z DSA Course Sheet](https://takeuforward.org/strivers-a2z-dsa-course/strivers-a2z-dsa-course-sheet-2/) in **C++**
 
@@ -176,7 +176,7 @@ This project includes a custom Chrome Extension + Local Sync Server that automat
 2. It auto-detects the question title, programming language, code snippet, and target folder (e.g. `01_Learn_Basics/patterns`, `03_Arrays/easy`).
 3. Upon clicking **🚀 Save & Push to GitHub**, it automatically:
    - Saves the code locally into `D:\Stirver_A2Z_DSA\<folder>\<filename>` with problem metadata headers.
-   - Pushes the code directly to your GitHub Repository (`OMKAR580/Striver-A2Z-DSA`).
+   - Pushes the code directly to your GitHub Repository (`sarcasticyash/DSA-prarctice`).
 
 ### 🛠️ Setup Instructions:
 1. **Start Sync Server**:

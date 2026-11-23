@@ -1,13 +1,22 @@
-// Striver A2Z DSA Auto-Sync Content Script
+// Striver A2Z DSA Auto-Sync Content Script - v2.0 (Fixed)
 (function () {
-    console.log("🚀 Striver DSA Auto-Sync Extension Active!");
+    console.log("🚀 Striver DSA Auto-Sync Extension Active! v2.0");
 
     let isModalOpen = false;
-    const handledSubmissions = new Set();
+
+    // handledSubmissions: problemTitle -> 'detecting' | 'cancelled' | 'pushed'
+    // 'detecting'  = modal currently being opened (prevents double-open)
+    // 'cancelled'  = user dismissed; don't auto-trigger again this page session
+    // 'pushed'     = successfully pushed; never auto-trigger again this session
+    const handledSubmissions = new Map();
+
+    // Debounce timer for MutationObserver — prevents flood of calls on DOM changes
+    let detectDebounceTimer = null;
 
     // Observer to detect submission completion
     const observer = new MutationObserver(() => {
-        detectSuccessfulSubmission();
+        clearTimeout(detectDebounceTimer);
+        detectDebounceTimer = setTimeout(detectSuccessfulSubmission, 600);
     });
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
@@ -16,7 +25,10 @@
         if (isModalOpen) return;
 
         const problemTitle = extractProblemTitle();
-        if (!problemTitle || handledSubmissions.has(problemTitle)) return;
+        if (!problemTitle) return;
+
+        // Skip if already handled (cancelled, detecting, or pushed)
+        if (handledSubmissions.has(problemTitle)) return;
 
         const url = window.location.href;
         let isSuccess = false;
@@ -59,30 +71,37 @@
         if (isSuccess) {
             console.log(`🎉 Successful submission detected for "${problemTitle}"! Checking sync status...`);
 
-            // Check if already synced previously
+            // Check if already synced previously (persists across page reloads)
             try {
                 chrome.storage.local.get(["synced_problems"], (storageData) => {
                     const syncedMap = storageData.synced_problems || {};
                     if (syncedMap[problemTitle]) {
                         console.log(`ℹ️ Problem "${problemTitle}" is already synced in local/GitHub!`);
-                        handledSubmissions.add(problemTitle);
-                        showToast("ℹ️ Already Synced!", `Solution for "${problemTitle}" is already synced to GitHub & Local!\nUse extension toolbar icon if you wish to re-push.`, false);
+                        handledSubmissions.set(problemTitle, "pushed");
+                        showToast("ℹ️ Already Synced!", `Solution for "${problemTitle}" is already synced!\nUse the extension toolbar icon (🚀) to re-push if needed.`, false);
                         return;
                     }
-                    triggerSyncModal();
+                    // Mark as detecting so observer won't fire again while modal opens
+                    handledSubmissions.set(problemTitle, "detecting");
+                    triggerSyncModal(false);
                 });
             } catch (e) {
-                triggerSyncModal();
+                handledSubmissions.set(problemTitle, "detecting");
+                triggerSyncModal(false);
             }
         }
     }
 
-    // Manual trigger listener from window shortcut or extension toolbar
-    window.addEventListener("message", (event) => {
-        if (event.data && event.data.type === "TRIGGER_STRIVER_SYNC") {
+    // Manual trigger from extension popup toolbar (via chrome.tabs.sendMessage)
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message && message.type === "TRIGGER_STRIVER_SYNC") {
             const title = extractProblemTitle();
-            if (title) handledSubmissions.delete(title); // allow manual trigger
+            if (title) {
+                // Remove state so manual trigger always works, even after cancel
+                handledSubmissions.delete(title);
+            }
             triggerSyncModal(true);
+            sendResponse({ ok: true });
         }
     });
 
@@ -90,7 +109,11 @@
         if (isModalOpen) return;
 
         const problemTitle = extractProblemTitle();
-        if (!force && handledSubmissions.has(problemTitle)) return;
+        if (!force) {
+            const state = handledSubmissions.get(problemTitle);
+            // Don't auto-trigger if cancelled or already pushed
+            if (state === "cancelled" || state === "pushed") return;
+        }
 
         isModalOpen = true;
 
@@ -180,6 +203,15 @@
         });
     }
 
+    function escapeHtml(text) {
+        return (text || '')
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     function renderModal(data) {
         const existing = document.getElementById("striver-sync-overlay-root");
         if (existing) existing.remove();
@@ -192,6 +224,8 @@
             const selected = (f === data.suggestedFolder) ? 'selected="selected"' : '';
             return `<option value="${f}" ${selected}>📁 ${f}</option>`;
         }).join('');
+
+        const totalLines = data.code ? data.code.split('\n').length : 0;
 
         overlay.innerHTML = `
             <div class="striver-sync-modal">
@@ -207,10 +241,20 @@
                         <div class="striver-sync-problem-name" title="${data.problemTitle}">${data.problemTitle}</div>
                         <div class="striver-sync-problem-meta">
                             <span>💻 Lang: <strong>${data.language.toUpperCase()}</strong></span>
-                            <span>📄 Lines: <strong>${data.code.split('\n').length}</strong></span>
+                            <span>📄 Lines: <strong id="striver-sync-meta-lines" style="color: #344d399;">${totalLines}</strong></span>
                             <span>🌿 Git Branch: <strong style="color: #60a5fa;">${data.targetBranch}</strong></span>
                         </div>
                     </div>
+
+                    <details class="striver-sync-code-accordion" open>
+                        <summary class="striver-sync-code-summary">
+                            <span>👁️ Captured Code (<strong id="striver-sync-line-count" style="color: #34d399;">${totalLines}</strong> lines)</span>
+                            <button type="button" class="striver-sync-reextract-btn" id="striver-sync-reextract-btn">🔄 Re-sync Code</button>
+                        </summary>
+                        <div class="striver-sync-code-preview-container">
+                            <textarea id="striver-sync-code-editor" class="striver-sync-code-textarea" spellcheck="false">${escapeHtml(data.code)}</textarea>
+                        </div>
+                    </details>
 
                     <div class="striver-sync-field-group">
                         <label class="striver-sync-label">Target Local & GitHub Folder</label>
@@ -226,7 +270,7 @@
 
                     <div class="striver-sync-field-group">
                         <label class="striver-sync-label">📝 Personal Notes (Saved Locally Only • Ignored by Git)</label>
-                        <textarea class="striver-sync-textarea" id="striver-sync-notes-input" placeholder="Add key intuition, complexity, or notes here... (Saved in local project only, never pushed to GitHub)">${data.existingNotes || ''}</textarea>
+                        <textarea class="striver-sync-textarea" id="striver-sync-notes-input" placeholder="Add key intuition, complexity, or notes here... (Saved in local project only, never pushed to GitHub)">${escapeHtml(data.existingNotes || '')}</textarea>
                     </div>
 
                     <div class="striver-sync-target-preview">
@@ -252,6 +296,33 @@
         const pushBtn = document.getElementById("striver-sync-push-btn");
         const cancelBtn = document.getElementById("striver-sync-cancel-btn");
         const closeBtn = document.getElementById("striver-sync-close");
+        const reextractBtn = document.getElementById("striver-sync-reextract-btn");
+        const codeTextarea = document.getElementById("striver-sync-code-editor");
+        const lineCountLabel = document.getElementById("striver-sync-line-count");
+        const lineCountMeta = document.getElementById("striver-sync-meta-lines");
+
+        if (reextractBtn && codeTextarea) {
+            reextractBtn.addEventListener("click", async () => {
+                reextractBtn.textContent = "⏳ Extracting...";
+                const freshCode = await extractCodeAsync();
+                if (freshCode && freshCode.trim().length > 0) {
+                    codeTextarea.value = freshCode;
+                    const lines = freshCode.split('\n').length;
+                    if (lineCountLabel) lineCountLabel.textContent = lines;
+                    if (lineCountMeta) lineCountMeta.textContent = lines;
+                    showToast("🔄 Code Re-synced", `Updated solution code (${lines} lines) extracted from editor!`, false);
+                } else {
+                    showToast("⚠️ Re-sync Warning", "Could not extract fresh code from editor.", true);
+                }
+                reextractBtn.textContent = "🔄 Re-sync Code";
+            });
+
+            codeTextarea.addEventListener("input", () => {
+                const lines = codeTextarea.value.split('\n').length;
+                if (lineCountLabel) lineCountLabel.textContent = lines;
+                if (lineCountMeta) lineCountMeta.textContent = lines;
+            });
+        }
 
         function updatePreview() {
             pathPreview.textContent = `D:/Stirver_A2Z_DSA/${folderSelect.value}/${filenameInput.value}`;
@@ -260,12 +331,36 @@
         folderSelect.addEventListener("change", updatePreview);
         filenameInput.addEventListener("input", updatePreview);
 
+        // Click outside modal to cancel
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) dismissModal(true);
+        });
+
+        // Escape key to cancel
+        const escKeyHandler = (e) => {
+            if (e.key === "Escape") {
+                dismissModal(true);
+            }
+        };
+        document.addEventListener("keydown", escKeyHandler);
+
         const dismissModal = (wasCancelled) => {
-            handledSubmissions.add(data.problemTitle);
+            document.removeEventListener("keydown", escKeyHandler);
+
+            if (wasCancelled) {
+                // Mark as 'cancelled' — MutationObserver won't auto-trigger again this session
+                // But manual trigger from popup toolbar still works (it calls handledSubmissions.delete)
+                handledSubmissions.set(data.problemTitle, "cancelled");
+            } else {
+                // Mark as 'pushed' — no more auto or toast this session
+                handledSubmissions.set(data.problemTitle, "pushed");
+            }
+
             overlay.remove();
             isModalOpen = false;
+
             if (wasCancelled) {
-                showToast("ℹ️ Sync Dismissed", "Auto-sync closed for this problem. You can sync anytime from toolbar icon.", false);
+                showToast("ℹ️ Sync Dismissed", "Auto-sync closed. Use the extension toolbar icon (🚀) to manually push anytime!", false);
             }
         };
 
@@ -274,14 +369,17 @@
 
         pushBtn.addEventListener("click", async () => {
             pushBtn.disabled = true;
+            cancelBtn.disabled = true;
+            closeBtn.disabled = true;
             pushBtn.innerHTML = `⏳ Saving & Pushing to ${data.targetBranch}...`;
 
             const folder = folderSelect.value;
             const filename = filenameInput.value.trim();
             const notes = notesInput.value.trim();
+            const finalCode = (codeTextarea && codeTextarea.value.trim().length > 0) ? codeTextarea.value : data.code;
 
             const result = await pushCodeFromBackgroundWorker({
-                code: data.code,
+                code: finalCode,
                 filename: filename,
                 folder: folder,
                 questionTitle: data.problemTitle,
@@ -315,12 +413,14 @@
                 // Step 2: GitHub Push Popup Notification (with short delay)
                 setTimeout(() => {
                     if (result.gitPushed) {
-                        showToast(`🚀 Step 2: Pushed to GitHub (${data.targetBranch})!`, `Repository: OMKAR580/Striver-A2Z-DSA\nBranch: ${data.targetBranch}\nCommit: Add solution: ${data.problemTitle}`, false);
+                        showToast(`🚀 Step 2: Pushed to GitHub (${data.targetBranch})!`, `Repository: sarcasticyash/DSA-prarctice\nBranch: ${data.targetBranch}\nCommit: Add solution: ${data.problemTitle}`, false);
                     } else {
                         showToast("⚠️ Step 2: Local Saved (Git Pending)", result.message, true);
                     }
                 }, 1400);
             } else {
+                // Push failed — remove state so user can retry (either manually or by re-submitting)
+                handledSubmissions.delete(data.problemTitle);
                 showToast("❌ Push Failed", result.message, true);
             }
         });
@@ -375,6 +475,9 @@
             console.error("Failed to inject pageScript.js", e);
         }
     }
+
+    // NOTE: injectInlinePageScript removed — Chrome MV3 CSP blocks inline script.textContent injection.
+    // All main-world code extraction is handled by pageScript.js (external file via chrome.runtime.getURL).
     injectPageScript();
 
     function getCodeFromPageContext() {
@@ -395,11 +498,10 @@
                 detail: { requestId: requestId }
             }));
 
-            // Timeout fallback after 350ms
             setTimeout(() => {
                 window.removeEventListener("STRIVER_SYNC_RESPONSE_PAGE_CODE", onResponse);
                 resolve(null);
-            }, 350);
+            }, 300);
         });
     }
 
@@ -465,17 +567,72 @@
         return "// Solution Code\n";
     }
 
+    async function extractCodeFromVirtualizedDOM() {
+        const scrollContainer = document.querySelector(".monaco-editor .monaco-scrollable-element") ||
+                                document.querySelector(".monaco-editor .lines-content") ||
+                                document.querySelector(".monaco-editor") ||
+                                document.querySelector(".CodeMirror-scroll");
+
+        if (!scrollContainer) return extractCodeFromDOM();
+
+        const originalScrollTop = scrollContainer.scrollTop;
+        const scrollHeight = scrollContainer.scrollHeight || 3000;
+        const clientHeight = scrollContainer.clientHeight || 300;
+
+        const linesMap = new Map();
+
+        const harvestCurrentLines = () => {
+            const monacoLines = document.querySelectorAll(".monaco-editor .view-line");
+            monacoLines.forEach((lineElem) => {
+                let topPos = null;
+                const getTopStyle = (el) => {
+                    const st = el.getAttribute("style") || "";
+                    const m = st.match(/top:\s*([\d.]+)px/i);
+                    return m ? parseFloat(m[1]) : null;
+                };
+
+                let pos = getTopStyle(lineElem);
+                if (pos === null && lineElem.parentElement) {
+                    pos = getTopStyle(lineElem.parentElement);
+                }
+                if (pos === null) pos = 0;
+
+                const text = lineElem.textContent.replace(/\u00a0/g, ' ');
+                linesMap.set(Math.round(pos), text);
+            });
+        };
+
+        harvestCurrentLines();
+
+        if (scrollHeight > clientHeight) {
+            const step = Math.max(60, clientHeight - 40);
+            for (let pos = 0; pos <= scrollHeight + step; pos += step) {
+                scrollContainer.scrollTop = pos;
+                await new Promise(r => setTimeout(r, 20));
+                harvestCurrentLines();
+            }
+            scrollContainer.scrollTop = originalScrollTop;
+        }
+
+        if (linesMap.size === 0) return extractCodeFromDOM();
+
+        const sortedTops = Array.from(linesMap.keys()).sort((a, b) => a - b);
+        const codeLines = sortedTops.map(top => linesMap.get(top));
+        const combined = codeLines.join('\n');
+        return combined.trim().length > 0 ? combined : extractCodeFromDOM();
+    }
+
     async function extractCodeAsync() {
-        // Step 1: Try in-memory Monaco/CodeMirror model via pageScript
+        // Step 1: Try in-memory Monaco/CodeMirror model via pageScript / React fiber
         const pageCode = await getCodeFromPageContext();
         if (pageCode && pageCode.trim().length > 0) {
-            console.log("✅ Code extracted directly from editor in-memory text model!");
+            console.log("✅ Code extracted directly from editor in-memory text model / React Fiber!");
             return pageCode;
         }
 
-        // Step 2: Fallback to top-sorted DOM lines
-        console.log("ℹ️ Falling back to top-sorted DOM line extraction...");
-        return extractCodeFromDOM();
+        // Step 2: Fallback to micro-scrolling virtualized DOM harvester
+        console.log("ℹ️ Falling back to virtualized DOM micro-scroll line extraction...");
+        return extractCodeFromVirtualizedDOM();
     }
 
     function extractCode() {

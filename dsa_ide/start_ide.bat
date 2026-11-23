@@ -9,7 +9,7 @@ echo      ⚡  DSA IDE  —  Striver A2Z DSA Sheet
 echo   =============================================
 echo.
 
-cd /d d:\Stirver_A2Z_DSA\dsa_ide
+cd /d "%~dp0"
 
 if not exist node_modules (
     echo   Installing dependencies (only first time)...
